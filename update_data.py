@@ -23,7 +23,7 @@ from collections import Counter
 
 import requests
 
-APP_VERSION = "1.2.2"
+APP_VERSION = "1.2.3"
 BASE_URL = "https://json.tarkov.dev"
 GAME_MODE = "pve"
 ENDPOINTS = ["items", "items_en", "items_ru", "maps", "maps_en", "maps_ru", "traders", "traders_en",
@@ -630,8 +630,12 @@ def attach_optic(game, tree, pref_key, extra_banned=None):
     def walk(node, depth):
         filled = {c["s"] for c in node["ch"]}
         for slot in game.props(node["i"]).get("slots") or []:
-            if slot["nameId"].startswith(OPTIC_SLOT_PREFIXES) and slot["nameId"] not in filled:
+            if slot["nameId"] in filled:
+                continue
+            if slot["nameId"].startswith(OPTIC_SLOT_PREFIXES):
                 empties.append((depth, 0 if slot["nameId"].startswith("mod_scope") else 1, node, slot))
+            elif slot["nameId"].startswith("mod_sight_rear"):  # pistol slides take their red-dot mount here (FN 5-7)
+                empties.append((depth, 2, node, slot))
         for c in node["ch"]:
             walk(c["n"], depth + 1)
 
