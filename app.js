@@ -484,7 +484,7 @@
   function renderVerdict(g) {
     var tier = (C.GUNS[g.nn] || {}).tier;
     var html = "<h3>" + esc(t("verdictTitle")) + "</h3>";
-    if (tier) html += '<div class="curated">' + esc(t("tierLine")) + ' <span class="tier ' + tier + '">' + tier + '</span> <span class="note">' + esc(t("tierScale")) + "</span></div>";
+    if (tier) html += '<div class="curated">' + esc(t("tierLine")) + ' <span class="tier ' + tier + '">' + tier + '</span></div><div class="note">' + esc(t("tierScale")) + "</div>";
     else html += '<div class="note">' + esc(t("noTier")) + "</div>";
     html += '<div class="curated">' + esc(txt("guns", g.nn, "summary") || txt("classes", g.cls, "role_text") || "") + "</div>";
     var tip = txt("guns", g.nn, "pve") || txt("classes", g.cls, "pve");
