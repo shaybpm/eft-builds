@@ -200,7 +200,7 @@
     var mag = null;
     walk(b.tree, 0, null, null, []).forEach(function (r) { if (r.slot === "mod_magazine") mag = item(r.node.i); });
     var auto = g.modes.some(function (m) { return /auto|burst/i.test(m) && !/semi/i.test(m); });
-    var gunPrice = g.price ? g.price.p : null;
+    var gunPrice = b.st.gp != null ? b.st.gp : (g.price ? g.price.p : null); // the build's cheapest way to buy the gun
     return {
       v: b.st.v, h: b.st.h, e: b.st.e, w: b.st.w,
       cost: b.st.cost + (gunPrice || 0), partsCost: b.st.cost, gunPrice: gunPrice,
@@ -479,7 +479,9 @@
 
   function renderStats(g) {
     var b = build(g, state.profile), st = b.st, def = g.def || {};
-    var gunPrice = g.price ? g.price.p : null;
+    // the gun is bought the cheaper way for this build: bare, or as the factory preset whose parts the build keeps
+    var gunPrice = st.gp != null ? st.gp : (g.price ? g.price.p : null);
+    var gunLbl = st.route === "preset" ? t("baseGunPreset") : t("baseGun");
     var maxV = Math.max(g.base.v, def.v || 0), maxH = Math.max(g.base.h, def.h || 0);
     $("statsCard").innerHTML =
       "<h3>" + esc(t("statsTitle")) + "</h3>" +
@@ -489,9 +491,9 @@
       statBox(t("ergo"), st.e, def.e, false, 100) +
       statBox(t("weight"), st.w, null, true, 0) +
       "</div>" +
-      '<div class="cost-row"><div>' + esc(t("baseGun")) + " <b>" + rub(gunPrice) + "</b></div><div>" + esc(t("partsLbl")) + " <b>" + rub(st.cost) + "</b> " + esc(t("partsCount", st.parts)) + "</div>" +
+      '<div class="cost-row"><div>' + esc(gunLbl) + " <b>" + rub(gunPrice) + "</b></div><div>" + esc(t("partsLbl")) + " <b>" + rub(st.cost) + "</b> " + esc(t("partsCount", st.parts)) + "</div>" +
       '<div class="total">' + esc(t("total", rub(st.cost + (gunPrice || 0)))) + "</div></div>" +
-      '<div class="note">' + esc(t("costNote") + (st.unknown ? t("unknownNote", st.unknown) : "")) + "</div>";
+      '<div class="note">' + esc(t("costNote") + (st.inc ? t("incNote", st.inc) : "") + (st.unknown ? t("unknownNote", st.unknown) : "")) + "</div>";
   }
 
   function fxChips(it) {
@@ -524,7 +526,8 @@
         '<div><div class="pn">' + bdi(nm(it)) + "</div>" +
         '<div class="pw">' + where + (r.node.o ? " · <b>" + esc(t("opticLbl")) + "</b>" : "") + "</div>" +
         '<div class="pfx">' + fxChips(it) + "</div></div>" +
-        '<div class="pp"><div class="price">' + rub(it.p) + '</div><div class="src">' + esc(sourceText(it)) + "</div></div></div>";
+        (r.node.f ? '<div class="pp"><div class="price">' + esc(t("withGun")) + "</div></div></div>"
+          : '<div class="pp"><div class="price">' + rub(it.p) + '</div><div class="src">' + esc(sourceText(it)) + "</div></div></div>");
     });
     var hasSuppressor = rows.some(function (r) { return item(r.node.i).c === "Silencer"; });
     var note = metaNote();

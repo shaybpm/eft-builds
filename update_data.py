@@ -11,6 +11,7 @@ Usage:
 """
 
 import argparse
+import copy
 import datetime
 import json
 import math
@@ -18,10 +19,11 @@ import os
 import sys
 import time
 import traceback
+from collections import Counter
 
 import requests
 
-APP_VERSION = "1.2.1"
+APP_VERSION = "1.2.2"
 BASE_URL = "https://json.tarkov.dev"
 GAME_MODE = "pve"
 ENDPOINTS = ["items", "items_en", "items_ru", "maps", "maps_en", "maps_ru", "traders", "traders_en",
@@ -66,12 +68,14 @@ PROFILES = {
     "balanced": {"we": 0.25, "cost": 1 / 12000},
     "budget": {"we": 0.25, "cost": 1 / 2500},
 }
-MIN_META_ERGO = 35
+MIN_META_ERGO = 35  # a meta/balanced build (sight included) below this ergonomics is rebuilt with more weight on ergonomics
 SUSTAINED_FIRE_S = 2.0  # a full-auto magazine should last at least this many seconds of continuous fire
-# The rule above applies to light-caliber automatics only: battle rifles and shotguns kill in fewer
-# rounds, and a drum on them costs more ergonomics than it is worth.
-SUSTAINED_CLASSES = {"smg", "pistol", "ar", "carbine", "lmg"}
-HEAVY_CALIBERS = {"762x51", "68x51", "762x54R", "127x55", "86x70", "93x64", "127x99", "366TKM"}  # a meta/balanced build below this ergonomics is rebuilt with more weight on ergonomics
+# The rule above applies to every full-auto gun, whatever its class (the VSS and the automatic shotguns included),
+# except battle-rifle calibers: they kill in fewer rounds, and a drum on them costs more ergonomics than it is worth.
+HEAVY_CALIBERS = {"762x51", "68x51", "762x54R", "127x55", "86x70", "93x64", "127x99", "366TKM"}
+# Semi-automatic marksman rifles and bolt-action rifles: the smallest magazine players run in that role
+# (2026 outside builds: SVDS 20 rounds, M700 10). Used only when such a magazine exists for the gun.
+MIN_MAG_BY_CLASS = {"dmr": 20, "sniper": 10}
 
 # Optic preference lists by short name, best first
 OPTIC_PREFS = {
@@ -304,6 +308,7 @@ class Builder:
         self.memo = {}
         self.in_progress = set()
         self.default_parts = []
+        self.free = frozenset()  # factory-preset parts that come with the gun on this purchase route
         self.gun = {}  # properties of the weapon being built (fire rate, fire modes)
 
     def own_score(self, iid):
@@ -311,13 +316,13 @@ class Builder:
         r = p.get("recoilModifier") or 0
         e = p.get("ergonomics") or 0
         acq = self.g.acquire(iid)
-        price = acq["p"] if acq else 0
+        price = 0 if iid in self.free else (acq["p"] if acq else 0)
         return -r * 100 + self.we * e - self.wc * price
 
     def candidates(self, slot, required):
         allowed = [i for i in slot["filters"]["allowedItems"] if i in self.g.items and i not in self.banned]
         allowed = [i for i in allowed if "gun" not in self.g.items[i]["types"]]
-        ok = [i for i in allowed if self.g.acquire(i)]
+        ok = [i for i in allowed if self.g.acquire(i) or i in self.free]
         if ok or not required:
             return ok
         return allowed  # required slot with nothing obtainable: fall back to anything that fits
@@ -471,19 +476,22 @@ class Builder:
         return [(1e-6 * (len(top) - n), {"i": m[0], "ch": []}, frozenset([m[0]])) for n, m in enumerate(top)]
 
     def default_capacity(self, slot, mags):
+        """Smallest capacity the build should carry: the factory magazine's, raised to the sustained-fire need
+        of full-auto guns and to the role minimum of marksman and bolt-action rifles."""
+        floor = max(self.sustained_capacity(), MIN_MAG_BY_CLASS.get(self.cls, 0))
         allowed = set(slot["filters"]["allowedItems"])
         for c in self.default_parts:
             if c in allowed:
                 cap = self.g.props(c).get("capacity")
                 if cap:
-                    return max(cap, self.sustained_capacity())
+                    return max(cap, floor)
         caps = sorted(m[1] for m in mags)
-        return max(caps[len(caps) // 2], self.sustained_capacity())
+        return max(caps[len(caps) // 2], floor)
 
     def sustained_capacity(self):
-        """Rounds a full-auto gun fires in SUSTAINED_FIRE_S seconds: fast guns (MP7, Vector) need
+        """Rounds a full-auto gun fires in SUSTAINED_FIRE_S seconds: fast guns (MP7, Vector, VSS, AA-12) need
         a bigger magazine than their factory one, or a short burst empties it."""
-        if "fullauto" not in (self.gun.get("fireModes") or []) or self.cls not in SUSTAINED_CLASSES:
+        if "fullauto" not in (self.gun.get("fireModes") or []):
             return 0
         if (self.gun.get("caliber") or "").replace("Caliber", "") in HEAVY_CALIBERS:
             return 0
@@ -507,22 +515,23 @@ def find_conflict(game, ids):
     return None
 
 
-def run_dp(game, gun_id, profile, banned, cls, default_parts):
+def run_dp(game, gun_id, profile, banned, cls, default_parts, free=frozenset()):
     b = Builder(game, profile, banned, cls)
     b.default_parts = default_parts
+    b.free = free
     b.gun = game.props(gun_id)
     res = b.best_item(gun_id, 0)
     return (res[0], res[1]) if res else None
 
 
-def optimize(game, gun_id, profile, cls, default_parts, beam=6, rounds=30):
+def optimize(game, gun_id, profile, cls, default_parts, free=frozenset(), beam=6, rounds=30):
     """DP plus conflict repair by beam search.
 
     When the best DP pick contains two parts that cannot coexist, branch by banning either one and
     re-running the DP. The DP score with conflicts is an upper bound for every conflict-free build
     reachable by more bans, so a branch that cannot beat the best clean build is pruned.
     """
-    first = run_dp(game, gun_id, profile, frozenset(), cls, default_parts)
+    first = run_dp(game, gun_id, profile, frozenset(), cls, default_parts, free)
     if not first:
         return None
     frontier = [(first[0], frozenset(), first)]
@@ -544,7 +553,7 @@ def optimize(game, gun_id, profile, cls, default_parts, beam=6, rounds=30):
                 if nb in seen:
                     continue
                 seen.add(nb)
-                alt = run_dp(game, gun_id, profile, nb, cls, default_parts)
+                alt = run_dp(game, gun_id, profile, nb, cls, default_parts, free)
                 if alt:
                     nxt.append((alt[0], nb, alt))
         nxt.sort(key=lambda t: -t[0])
@@ -561,7 +570,7 @@ def optimize(game, gun_id, profile, cls, default_parts, beam=6, rounds=30):
         if not conflict:
             return res
         banned.add(conflict[1] if conflict[1] != gun_id else conflict[0])
-        res = run_dp(game, gun_id, profile, frozenset(banned), cls, default_parts)
+        res = run_dp(game, gun_id, profile, frozenset(banned), cls, default_parts, free)
         if not res:
             return None
     return None
@@ -654,22 +663,35 @@ def attach_optic(game, tree, pref_key, extra_banned=None):
     return node, best[1], best[2]["nameId"]
 
 
-def build_stats(game, gun_id, tree):
+def build_stats(game, gun_id, tree, gun_price=None, route=None):
+    """Recoil, ergonomics, weight and cost of a finished tree. Parts marked "f" came with the factory preset
+    (route "preset"), so they cost nothing extra; gun_price is what the gun itself costs on that route."""
     p = game.props(gun_id)
-    ids = flatten(tree)
-    parts = [i for i in ids if i != gun_id]
-    rsum = sum(game.props(i).get("recoilModifier") or 0 for i in parts)
-    esum = sum(game.props(i).get("ergonomics") or 0 for i in parts)
-    weight = sum(game.items[i].get("weight") or 0 for i in ids)
+    nodes = []
+
+    def walk(n):
+        nodes.append(n)
+        for c in n["ch"]:
+            walk(c["n"])
+
+    walk(tree)
+    parts = nodes[1:]
+    rsum = sum(game.props(n["i"]).get("recoilModifier") or 0 for n in parts)
+    esum = sum(game.props(n["i"]).get("ergonomics") or 0 for n in parts)
+    weight = sum(game.items[n["i"]].get("weight") or 0 for n in nodes)
     cost = 0
     unknown = 0
-    for i in parts:
-        acq = game.acquire(i)
+    included = 0
+    for n in parts:
+        if n.get("f"):
+            included += 1
+            continue
+        acq = game.acquire(n["i"])
         if acq:
             cost += acq["p"]
         else:
             unknown += 1
-    return {
+    st = {
         "v": round(p["recoilVertical"] * (1 + rsum)),
         "h": round(p["recoilHorizontal"] * (1 + rsum)),
         "e": round(max(0, min(100, p["ergonomics"] + esum)), 1),
@@ -678,19 +700,98 @@ def build_stats(game, gun_id, tree):
         "unknown": unknown,
         "parts": len(parts),
     }
+    if gun_price is not None:
+        st["gp"] = int(gun_price)
+        st["route"] = route
+        st["inc"] = included
+    return st
 
 
-def make_build(game, gun_id, profile_key, cls, default_parts):
+def with_optic(game, tree, cls):
+    """Copy of the tree with the primary sight attached: what the finished build will weigh in at."""
+    t = copy.deepcopy(tree)
+    optic = attach_optic(game, t, OPTIC_PLAN[cls][0])
+    if optic:
+        node, parent, slot_nid = optic
+        parent["ch"].append({"s": slot_nid, "n": node})
+    return t
+
+
+def route_score(game, tree, weights, free, gun_price):
+    """The profile score of a tree when the gun is bought on a given route: factory parts it reuses are free
+    (once each), everything else and the gun itself are paid for."""
+    left = Counter(free)
+    s = -weights["cost"] * (gun_price or 0)
+    for iid in flatten(tree)[1:]:
+        p = game.props(iid)
+        if left[iid] > 0:
+            left[iid] -= 1
+            price = 0
+        else:
+            acq = game.acquire(iid)
+            price = acq["p"] if acq else 0
+        s += -(p.get("recoilModifier") or 0) * 100 + weights["we"] * (p.get("ergonomics") or 0) - weights["cost"] * price
+    return s
+
+
+def mark_factory(tree, free):
+    """Flag the nodes whose part comes with the factory preset (each preset part counts once)."""
+    left = Counter(free)
+
+    def walk(n, top):
+        if not top and left[n["i"]] > 0:
+            left[n["i"]] -= 1
+            n["f"] = 1
+        for c in n["ch"]:
+            walk(c["n"], False)
+
+    walk(tree, True)
+
+
+def ergo_floor(game, gun_id, profile_key, cls, default_parts, free, res, max_we=0.8, steps=7):
+    """Raise ergonomics to MIN_META_ERGO (sight included) at the smallest possible cost in recoil.
+
+    More weight on ergonomics makes the optimum jump: one big step can swap half the build. So the weight is
+    found by bisection - the lightest one whose build reaches the floor. If even max_we cannot reach it, the
+    most ergonomic build found is kept."""
+    def ergo(r):
+        return build_stats(game, gun_id, with_optic(game, r[1], cls))["e"]
+
+    if ergo(res) >= MIN_META_ERGO:
+        return res
     profile = dict(PROFILES[profile_key])
-    res = optimize(game, gun_id, profile, cls, default_parts)
-    if profile_key in ("meta", "balanced"):  # keep the build usable: trade some recoil for ergonomics if needed
-        for we in (0.5, 0.8):
-            if not res or build_stats(game, gun_id, res[1])["e"] >= MIN_META_ERGO:
-                break
-            profile["we"] = we
-            res = optimize(game, gun_id, profile, cls, default_parts) or res
-    if not res:
+    lo, hi = profile["we"], max_we
+    profile["we"] = hi
+    best = optimize(game, gun_id, profile, cls, default_parts, free) or res
+    if ergo(best) < MIN_META_ERGO:
+        return best
+    for _ in range(steps):
+        profile["we"] = (lo + hi) / 2
+        r = optimize(game, gun_id, profile, cls, default_parts, free)
+        if r and ergo(r) >= MIN_META_ERGO:
+            hi, best = profile["we"], r
+        else:
+            lo = profile["we"]
+    return best
+
+
+def make_build(game, gun_id, profile_key, cls, default_parts, routes):
+    """routes = ways to buy the gun: [(name, gun price, factory parts that come with it)]. Every route is optimised
+    and the one with the best total score wins, so a preset whose parts the build keeps is not charged twice."""
+    best = None
+    for route, gun_price, factory in routes:
+        free = frozenset(factory)
+        res = optimize(game, gun_id, dict(PROFILES[profile_key]), cls, default_parts, free)
+        if profile_key in ("meta", "balanced") and res:  # keep the finished build, sight included, usable
+            res = ergo_floor(game, gun_id, profile_key, cls, default_parts, free, res)
+        if not res:
+            continue
+        score = route_score(game, res[1], PROFILES[profile_key], factory, gun_price)
+        if best is None or score > best[0] + 1e-9:
+            best = (score, res, route, gun_price, factory)
+    if not best:
         return None
+    _, res, route, gun_price, factory = best
     tree = res[1]
     primary, alternative = OPTIC_PLAN[cls]
     alt_ids = None
@@ -702,7 +803,9 @@ def make_build(game, gun_id, profile_key, cls, default_parts):
     if optic:
         node, parent, slot_nid = optic
         parent["ch"].append({"s": slot_nid, "n": node})
-    stats = build_stats(game, gun_id, tree)
+    if route == "preset":
+        mark_factory(tree, factory)
+    stats = build_stats(game, gun_id, tree, gun_price, route)
     return {"tree": tree, "stats": stats, "alt": alt_ids}
 
 
@@ -830,10 +933,21 @@ def build_dataset(raw):
             continue
         preset = game.items.get(p.get("defaultPreset") or "", {})
         default_parts = [c["item"] for c in preset.get("containsItems", []) if c["item"] in game.items]
+        # Two ways to buy the gun: the bare weapon plus every part, or the factory preset, whose parts come with it
+        bare, packed = game.acquire(gid), (game.acquire(preset["id"]) if preset else None)
+        factory = []
+        for c in preset.get("containsItems", []):
+            if c["item"] in game.items and c["item"] != gid and "ammo" not in game.items[c["item"]]["types"]:
+                factory += [c["item"]] * max(1, int(c.get("count") or 1))
+        routes = []
+        if bare or not packed:
+            routes.append(("bare", bare["p"] if bare else None, []))
+        if packed:
+            routes.append(("preset", packed["p"], factory))
         builds = {}
         for key in PROFILES:
             try:
-                b = make_build(game, gid, key, cls, default_parts)
+                b = make_build(game, gid, key, cls, default_parts, routes)
             except RecursionError:
                 b = None
             if b:
