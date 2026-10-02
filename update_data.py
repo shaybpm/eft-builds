@@ -13,6 +13,7 @@ Usage:
 import argparse
 import datetime
 import json
+import math
 import os
 import sys
 import time
@@ -20,7 +21,7 @@ import traceback
 
 import requests
 
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.2.1"
 BASE_URL = "https://json.tarkov.dev"
 GAME_MODE = "pve"
 ENDPOINTS = ["items", "items_en", "items_ru", "maps", "maps_en", "maps_ru", "traders", "traders_en",
@@ -65,7 +66,12 @@ PROFILES = {
     "balanced": {"we": 0.25, "cost": 1 / 12000},
     "budget": {"we": 0.25, "cost": 1 / 2500},
 }
-MIN_META_ERGO = 35  # a meta/balanced build below this ergonomics is rebuilt with more weight on ergonomics
+MIN_META_ERGO = 35
+SUSTAINED_FIRE_S = 2.0  # a full-auto magazine should last at least this many seconds of continuous fire
+# The rule above applies to light-caliber automatics only: battle rifles and shotguns kill in fewer
+# rounds, and a drum on them costs more ergonomics than it is worth.
+SUSTAINED_CLASSES = {"smg", "pistol", "ar", "carbine", "lmg"}
+HEAVY_CALIBERS = {"762x51", "68x51", "762x54R", "127x55", "86x70", "93x64", "127x99", "366TKM"}  # a meta/balanced build below this ergonomics is rebuilt with more weight on ergonomics
 
 # Optic preference lists by short name, best first
 OPTIC_PREFS = {
@@ -298,6 +304,7 @@ class Builder:
         self.memo = {}
         self.in_progress = set()
         self.default_parts = []
+        self.gun = {}  # properties of the weapon being built (fire rate, fire modes)
 
     def own_score(self, iid):
         p = self.g.props(iid)
@@ -454,8 +461,10 @@ class Builder:
             return []
         target = self.default_capacity(slot, mags)
         good = [m for m in mags if target <= m[1] <= max(target * 1.5, target + 10)]
-        if not good:
-            good = [m for m in mags if m[1] >= target] or mags
+        if not good:  # nothing in range: the smallest that reaches the target, else the biggest there is
+            big = [m for m in mags if m[1] >= target]
+            cap = min(m[1] for m in big) if big else max(m[1] for m in mags)
+            good = [m for m in mags if m[1] == cap]
         good.sort(key=lambda m: -(self.own_score(m[0]) + 0.02 * m[1]))
         top = good[:self.TOP_K]
         # tiny descending scores keep the ranking without letting magazines change the build score
@@ -467,9 +476,18 @@ class Builder:
             if c in allowed:
                 cap = self.g.props(c).get("capacity")
                 if cap:
-                    return cap
+                    return max(cap, self.sustained_capacity())
         caps = sorted(m[1] for m in mags)
-        return caps[len(caps) // 2]
+        return max(caps[len(caps) // 2], self.sustained_capacity())
+
+    def sustained_capacity(self):
+        """Rounds a full-auto gun fires in SUSTAINED_FIRE_S seconds: fast guns (MP7, Vector) need
+        a bigger magazine than their factory one, or a short burst empties it."""
+        if "fullauto" not in (self.gun.get("fireModes") or []) or self.cls not in SUSTAINED_CLASSES:
+            return 0
+        if (self.gun.get("caliber") or "").replace("Caliber", "") in HEAVY_CALIBERS:
+            return 0
+        return math.ceil((self.gun.get("fireRate") or 0) * SUSTAINED_FIRE_S / 60)
 
 
 def flatten(node, out=None):
@@ -492,6 +510,7 @@ def find_conflict(game, ids):
 def run_dp(game, gun_id, profile, banned, cls, default_parts):
     b = Builder(game, profile, banned, cls)
     b.default_parts = default_parts
+    b.gun = game.props(gun_id)
     res = b.best_item(gun_id, 0)
     return (res[0], res[1]) if res else None
 

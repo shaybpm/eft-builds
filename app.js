@@ -442,7 +442,7 @@
     if (g.dist) facts.push('<span class="chip">' + esc(t("dist", g.dist)) + "</span>");
     var price = g.price ? rub(g.price.p) + " · " + sourceText(g.price) : t("gunNotSold");
     $("hero").innerHTML =
-      '<div class="hero-img"><img alt="" src="' + esc(g.img) + '"></div>' +
+      '<div><div class="hero-img"><img alt="" src="' + esc(g.img) + '"></div><div class="note img-note">' + esc(t("imgNote")) + "</div></div>" +
       "<div><h2>" + bdi(sn(g)) + (tier ? '<span class="tier ' + tier + '" title="' + esc(t("tierLine")) + '">' + tier + "</span>" : "") + "</h2>" +
       '<div class="full">' + bdi(nm(g)) + "</div>" +
       '<div class="facts">' + facts.join("") + "</div>" +
