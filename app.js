@@ -435,12 +435,19 @@
     var b = build(g, state.profile);
     var rows = walk(b.tree, 0, null, null, []).slice(1);
     var html = '<div class="parts-head"><h3>' + esc(t("partsTitle")) + '</h3><span class="note">' + esc(t("partsHint")) + "</span></div>";
-    rows.forEach(function (r, i) {
+    // Outline numbers keep every row aligned and still show the tree: 3.1 mounts on part 3
+    var counters = [];
+    rows.forEach(function (r) {
+      counters.length = r.depth;
+      counters[r.depth - 1] = (counters[r.depth - 1] || 0) + 1;
+      r.num = counters.join(".");
+    });
+    rows.forEach(function (r) {
       var it = item(r.node.i);
       var on = r.parent.i === g.id ? esc(t("gunBody")) : bdi(sn(item(r.parent.i)));
       var where = esc(t("slotLbl", slotName(r.slot))) + " · " + t("mountedOn", on);
-      html += '<div class="part' + (r.node.o ? " optic" : "") + '" style="margin-inline-start:' + ((r.depth - 1) * 1.3) + 'rem">' +
-        '<div class="idx">' + (i + 1) + "</div>" +
+      html += '<div class="part' + (r.node.o ? " optic" : "") + (r.depth > 1 ? " child" : "") + '">' +
+        '<div class="idx">' + bdi(r.num) + "</div>" +
         '<div class="pimg">' + (it.img ? '<img loading="lazy" alt="" src="' + esc(it.img) + '">' : "") + "</div>" +
         '<div><div class="pn">' + bdi(nm(it)) + "</div>" +
         '<div class="pw">' + where + (r.node.o ? " · <b>" + esc(t("opticLbl")) + "</b>" : "") + "</div>" +

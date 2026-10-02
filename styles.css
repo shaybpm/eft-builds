@@ -96,9 +96,10 @@ select{font-family:inherit;font-size:1rem;background:var(--panel);color:var(--fg
 
 /* parts tree */
 .parts-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
-.part{display:grid;grid-template-columns:2rem 4.2rem minmax(0,1fr) auto;gap:10px;align-items:center;padding:.45rem .3rem;border-bottom:1px solid var(--border)}
+.part{display:grid;grid-template-columns:3.6rem 4.2rem minmax(0,1fr) auto;gap:10px;align-items:center;padding:.45rem .3rem;border-bottom:1px solid var(--border)}
 .part:last-child{border-bottom:none}
-.part .idx{color:var(--muted);font-size:.8rem;text-align:center}
+.part .idx{font-size:.85rem;font-weight:700;text-align:center;color:var(--accent)}
+.part.child .idx{color:var(--muted);font-weight:400}
 .part .pimg{width:4.2rem;height:3.2rem;background:var(--panel2);border-radius:8px;display:flex;align-items:center;justify-content:center;overflow:hidden}
 .part .pimg img{max-width:100%;max-height:100%;object-fit:contain}
 .part .pn{font-weight:600;text-align:start;overflow-wrap:anywhere}
@@ -109,7 +110,6 @@ select{font-family:inherit;font-size:1rem;background:var(--panel);color:var(--fg
 .part .pp .src{color:var(--muted);font-size:.75rem}
 .part.optic{background:linear-gradient(to left,transparent,var(--accent-soft))}
 [dir="rtl"] .part.optic{background:linear-gradient(to right,transparent,var(--accent-soft))}
-.tree-indent{border-inline-start:2px solid var(--border)}
 .alt-optic{margin-top:.7rem;font-size:.85rem;color:var(--muted)}
 
 /* ammo */
@@ -148,11 +148,9 @@ ul.pc.pros .ic{color:var(--good)} ul.pc.cons .ic{color:var(--bad)}
   select{width:100%;min-width:0}
   .ptab{min-width:0;flex:1 1 100%}
   .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .part{grid-template-columns:3.2rem minmax(0,1fr);row-gap:4px}
-  .part .idx{display:none}
+  .part{grid-template-columns:2.8rem 3.2rem minmax(0,1fr);row-gap:4px}
   .part .pimg{width:3.2rem;height:2.6rem}
-  .part .pp{grid-column:2;text-align:start}
-  .part[style]{margin-inline-start:0 !important}
+  .part .pp{grid-column:3;text-align:start}
 }
 footer{color:var(--muted);font-size:.8rem;margin-top:26px;border-top:1px solid var(--border);padding-top:12px}
 footer p{margin:.3rem 0}
