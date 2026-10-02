@@ -10,7 +10,7 @@
   var LANGS = ["he", "en", "ru"];
   var WEB = /^https?:$/.test(location.protocol); // hosted copy: data refreshes on the server side
   var D = null;
-  var state = { cls: null, gun: null, profile: "meta" };
+  var state = { mode: "gun", cls: null, gun: null, profile: "meta", map: null }; // map: chosen map id, null = automatic
   var classStats = {};
   var lastBanner = null;
 
@@ -111,8 +111,11 @@
     return below / arr.length;
   }
   function setHash() {
-    if (!state.gun) return;
-    try { history.replaceState(null, "", "#g=" + state.gun.nn + "&p=" + state.profile + "&l=" + lang); } catch (e) {}
+    var m = state.map ? "&m=" + state.map : "", h;
+    if (state.mode === "map") h = "#v=map" + m + "&l=" + lang;
+    else if (state.gun) h = "#g=" + state.gun.nn + "&p=" + state.profile + m + "&l=" + lang;
+    else return;
+    try { history.replaceState(null, "", h); } catch (e) {}
   }
 
   // ------------------------------------------------------------------ theme, font size, language (control bar)
@@ -150,6 +153,11 @@
     $("h1Text").textContent = t("h1");
     $("step1Text").textContent = t("step1");
     $("step2Text").textContent = t("step2");
+    $("stepMapText").textContent = t("stepMap");
+    Array.prototype.forEach.call(document.querySelectorAll("#modeTabs button"), function (b) {
+      b.textContent = t(b.getAttribute("data-mode") === "map" ? "modeMap" : "modeGun");
+      b.classList.toggle("sel", b.getAttribute("data-mode") === state.mode);
+    });
     $("modelSelect").setAttribute("aria-label", t("selectAria"));
     $("themeBtn").title = t("themeTitle");
     $("fsPlus").title = t("fsPlus");
@@ -172,7 +180,9 @@
       renderFooter();
       if (state.cls) selectClass(state.cls, false);
       else renderClasses();
-      if (state.gun) { $("modelSelect").value = state.gun.id; renderGun(); setHash(); }
+      if (state.gun) { $("modelSelect").value = state.gun.id; renderGun(); }
+      if (state.mode === "map") { renderMapGrid(); renderMapView(); }
+      setHash();
     }
     if (lastBanner) banner.apply(null, lastBanner);
   }
@@ -262,19 +272,80 @@
     if (g._m.bolt) w = [0, 0.45, 1];
     return w;
   }
-  function mapPlan(g) {
+  // How well a gun fits a map: its range profile against the map's, armor, and the curated map list
+  function mapFit(g, mp) {
     var w = roleWeights(g), pen = g._m.bestPen, cur = C.GUNS[g.nn] || {};
+    var info = C.MAPS[mp.id] || {};
+    var prof = info.prof || [0.5, 0.8, 0.5];
+    var s = w[0] * prof[0] + w[1] * prof[1] + w[2] * prof[2];
+    if (info.armor && pen < 35) s -= 0.35;
+    if (info.armor && pen >= 50) s += 0.12;
+    if (cur.maps && cur.maps.indexOf(mp.id) >= 0) s += 0.6;
+    return s;
+  }
+  function mapPlan(g) {
     var rows = D.maps.map(function (mp) {
       var info = C.MAPS[mp.id] || {};
-      var prof = info.prof || [0.5, 0.8, 0.5];
-      var s = w[0] * prof[0] + w[1] * prof[1] + w[2] * prof[2];
-      if (info.armor && pen < 35) s -= 0.35;
-      if (info.armor && pen >= 50) s += 0.12;
-      if (cur.maps && cur.maps.indexOf(mp.id) >= 0) s += 0.6;
-      return { mp: mp, info: info, s: s };
+      return { mp: mp, info: info, s: mapFit(g, mp) };
     }).filter(function (r) { return !r.info.skip; });
     rows.sort(function (a, b) { return b.s - a.s; });
     return { good: rows.slice(0, 4), bad: rows.slice(-2).reverse() };
+  }
+
+  // ------------------------------------------------------------------ second weapon and map-first picks
+  var TIER_BONUS = { S: 0.45, A: 0.3, B: 0.12, C: 0 };
+  var FIT_BAD = 0.45; // a map fit below this means the gun is a poor choice for that map
+  // How well a gun covers each range on its own: 1 fully, 0.5 partly, 0 not at all
+  function cover(g) {
+    var sub = g.cal === "9x39"; // subsonic 9x39: great up close, short reach
+    var slow = !g._m.auto && (g.rof || 0) <= 50; // bolt actions and slow semi-autos
+    if (g.cls === "sniper") return { long: 1, close: 0 };
+    if (g.cls === "dmr") return sub ? { long: 0.5, close: 1 } : { long: 1, close: slow ? 0 : 0.5 };
+    if (g.cls === "ar" || g.cls === "lmg") return { long: 0.5, close: 1 };
+    if (g.cls === "carbine") return { long: sub ? 0 : 0.5, close: slow ? 0.5 : 1 };
+    return { long: 0, close: 1 }; // smg, shotgun, pistol
+  }
+  function mapById(id) { for (var i = 0; i < D.maps.length; i++) if (D.maps[i].id === id) return D.maps[i]; return null; }
+  function playableMaps() { return D.maps.filter(function (mp) { return !(C.MAPS[mp.id] || {}).skip; }); }
+  function mapNeed(mp) { return (C.MAPS[mp.id] || {}).need || [1, 2]; } // [long-range, close-range], 0..3
+  // What a gun still lacks on a map: the role to pair it with and how strongly (0..3)
+  function kitGap(g, mp) {
+    var need = mapNeed(mp), c = cover(g);
+    var gapOf = function (lvl, cv) { return cv >= 1 ? 0 : Math.max(0, lvl - (cv > 0 ? 1 : 0)); };
+    var gl = gapOf(need[0], c.long), gc = gapOf(need[1], c.close);
+    return gl > gc ? { role: "long", lvl: gl } : { role: "close", lvl: gc };
+  }
+  function tierOf(g) { return (C.GUNS[g.nn] || {}).tier; }
+  function mapScore(g, mp) { return mapFit(g, mp) + (TIER_BONUS[tierOf(g)] || 0) + 0.4 * g._m.score / 100; }
+  // Score of a gun in one role (long or close) on one map; withGun is the gun it will be carried with
+  function roleScore(g, mp, role, withGun) {
+    var w = roleWeights(g), info = C.MAPS[mp.id] || {}, pen = g._m.bestPen, cur = C.GUNS[g.nn] || {};
+    var s = role === "long" ? w[2] : w[0] + 0.3 * w[1];
+    if (info.armor && pen < 35) s -= 0.35;
+    if (info.armor && pen >= 50) s += 0.12;
+    if (cur.maps && cur.maps.indexOf(mp.id) >= 0) s += 0.25;
+    s += (TIER_BONUS[cur.tier] || 0) + 0.4 * g._m.score / 100;
+    if (!g.price) s -= 0.2; // only from loot or barter: harder to bring along
+    if (withGun && withGun.cal === g.cal) s += 0.1;
+    return s;
+  }
+  function topUnique(guns, scoreFn, n) {
+    var seen = {};
+    return guns.map(function (g) { return { g: g, s: scoreFn(g) }; })
+      .sort(function (a, b) { return b.s - a.s; })
+      .filter(function (r) { var k = sn(r.g); if (seen[k]) return false; seen[k] = 1; return true; })
+      .slice(0, n).map(function (r) { return r.g; });
+  }
+  function rolePicks(mp, role, withGun, n) {
+    var guns = D.guns.filter(function (g) {
+      if (g === withGun || g.cls === "pistol" || g.cls === "lmg") return false;
+      return cover(g)[role] >= 1;
+    });
+    return topUnique(guns, function (g) { return roleScore(g, mp, role, withGun); }, n);
+  }
+  function mapTopPicks(mp, n) {
+    var guns = D.guns.filter(function (g) { return g.cls !== "pistol"; });
+    return topUnique(guns, function (g) { return mapScore(g, mp); }, n);
   }
 
   // ------------------------------------------------------------------ rendering
@@ -358,6 +429,7 @@
     renderVerdict(g);
     renderProsCons(g);
     renderMaps(g);
+    renderKit(g);
   }
 
   function renderHero(g) {
@@ -531,6 +603,123 @@
     $("mapsCard").innerHTML = html;
   }
 
+  // A clickable weapon tile that opens the weapon's builds
+  function gunTile(g, withGun) {
+    var tier = tierOf(g), chips = '<span class="chip">' + esc(className(g.cls)) + '</span><span class="chip">' + bdi(g.cal) + "</span>";
+    if (withGun && withGun.cal === g.cal) chips += '<span class="chip good">' + esc(t("sameAmmo")) + "</span>";
+    return '<button class="gtile" data-gun="' + esc(g.id) + '"><img loading="lazy" alt="" src="' + esc(g.img) + '">' +
+      '<div><div class="gn">' + bdi(sn(g)) + (tier ? '<span class="tier ' + tier + '">' + tier + "</span>" : "") + "</div>" +
+      '<div class="gm">' + chips + "</div></div></button>";
+  }
+  function wireTiles(box) {
+    Array.prototype.forEach.call(box.querySelectorAll(".gtile"), function (b) {
+      b.onclick = function () { openGun(b.getAttribute("data-gun")); };
+    });
+  }
+  function lvlBadge(lvl) { return '<span class="lvl l' + lvl + '">' + esc(t("lvl" + lvl)) + "</span>"; }
+
+  // Second weapon for the raid, for the map the user picks (default: the gun's best map)
+  function renderKit(g) {
+    var mp = (state.map && mapById(state.map)) || mapPlan(g).good[0].mp;
+    var html = "<h3>" + esc(t("kitTitle")) + "</h3>" +
+      '<div class="model-row"><label for="kitMap">' + esc(t("kitMapLbl")) + '</label><select id="kitMap">' +
+      playableMaps().map(function (m) { return '<option value="' + esc(m.id) + '"' + (m.id === mp.id ? " selected" : "") + ">" + esc(nm(m)) + "</option>"; }).join("") +
+      "</select></div>";
+    if (mapFit(g, mp) < FIT_BAD) {
+      html += '<div class="kit-warn">' + esc(t("badFit", nm(mp))) + ' <button class="linkbtn" id="kitSeeMap">' + esc(t("seeMapPicks", nm(mp))) + "</button></div>";
+    }
+    var gap = kitGap(g, mp);
+    if (!gap.lvl) {
+      html += '<div class="kit-need">' + lvlBadge(0) + " " + esc(t("kitNone", sn(g), nm(mp))) + "</div>";
+    } else {
+      var roleN = t(gap.role === "long" ? "roleLongN" : "roleCloseN");
+      html += '<div class="kit-need">' + lvlBadge(gap.lvl) + " <b>" + esc(t("kitGap", roleN)) + "</b></div>" +
+        '<div class="note">' + esc(t(gap.role === "long" ? "kitWhyLong" : "kitWhyClose")) + "</div>" +
+        '<div class="subhead">' + esc(t("kitPicks")) + '</div><div class="gtiles">' +
+        rolePicks(mp, gap.role, g, 3).map(function (x) { return gunTile(x, g); }).join("") + "</div>";
+    }
+    var tip = txt("kit", mp.id);
+    if (tip) html += '<div class="pve-tip"><b>' + esc(t("inMap")) + "</b> " + esc(tip) + "</div>";
+    var box = $("kitCard");
+    box.innerHTML = html;
+    wireTiles(box);
+    $("kitMap").onchange = function () { state.map = this.value; renderKit(g); setHash(); };
+    if ($("kitSeeMap")) $("kitSeeMap").onclick = function () { state.map = mp.id; setMode("map"); window.scrollTo(0, 0); };
+  }
+
+  function openGun(id) {
+    var g = gunById(id);
+    if (!g) return;
+    setMode("gun", true);
+    selectClass(g.cls, false);
+    selectGun(id);
+    $("weaponView").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  // ------------------------------------------------------------------ map-first view
+  function setMode(mode, quiet) {
+    state.mode = mode;
+    $("gunMode").hidden = mode !== "gun";
+    $("mapMode").hidden = mode !== "map";
+    Array.prototype.forEach.call(document.querySelectorAll("#modeTabs button"), function (b) {
+      b.classList.toggle("sel", b.getAttribute("data-mode") === mode);
+    });
+    if (mode === "map") { renderMapGrid(); renderMapView(); }
+    if (!quiet) setHash();
+  }
+  function renderMapGrid() {
+    var grid = $("mapGrid");
+    grid.innerHTML = "";
+    playableMaps().forEach(function (mp) {
+      var need = mapNeed(mp), chips = "";
+      if (need[0] >= 2) chips += '<span class="chip">' + esc(t("rangeLong")) + "</span>";
+      if (need[1] >= 2) chips += '<span class="chip">' + esc(t("rangeClose")) + "</span>";
+      var b = document.createElement("button");
+      b.className = "class-card map-card" + (state.map === mp.id ? " sel" : "");
+      b.innerHTML = '<div class="cn">' + bdi(nm(mp)) + '</div><div class="mc">' + chips + "</div>" +
+        (mp.dur ? '<div class="cc">' + esc(t("raidLen", mp.dur)) + "</div>" : "");
+      b.onclick = function () { state.map = mp.id; renderMapGrid(); renderMapView(); setHash(); };
+      grid.appendChild(b);
+    });
+  }
+  function renderMapView() {
+    var mp = state.map && mapById(state.map);
+    $("mapView").hidden = !mp;
+    if (!mp) return;
+    var need = mapNeed(mp);
+    var info = "<h2>" + bdi(nm(mp)) + "</h2>" +
+      '<div class="curated">' + esc(txt("maps", mp.id) || "") + "</div>" +
+      '<div class="note">' + esc(bossLine(mp)) + (mp.dur ? " · " + esc(t("raidLen", mp.dur)) : "") + "</div>" +
+      '<div class="subhead">' + esc(t("mapNeedTitle")) + "</div>" +
+      '<div class="need-row"><span>' + esc(t("roleLong")) + "</span>" + lvlBadge(need[0]) + "</div>" +
+      '<div class="need-row"><span>' + esc(t("roleClose")) + "</span>" + lvlBadge(need[1]) + "</div>";
+    if (need[0] >= 2 && need[1] >= 2) info += '<div class="curated"><b>' + esc(t("twoGuns")) + "</b></div>";
+    else if (!need[0] || !need[1]) info += '<div class="curated"><b>' + esc(t("oneGun")) + "</b></div>";
+    var tip = txt("kit", mp.id);
+    if (tip) info += '<div class="pve-tip">' + esc(tip) + "</div>";
+    $("mapInfo").innerHTML = info;
+
+    var combo = $("mapCombo");
+    if (need[0] && need[1]) {
+      // Main weapon = the role the map needs more; a tie goes to long range
+      var order = need[1] > need[0] ? ["close", "long"] : ["long", "close"];
+      combo.innerHTML = "<h3>" + esc(t("comboTitle")) + '</h3><div class="note">' + esc(t("comboHint")) + '</div><div class="combo">' +
+        order.map(function (role, i) {
+          return '<div class="combo-col"><div class="subhead">' + bdi(String(i + 1)) + ". " + esc(t(role === "long" ? "roleLong" : "roleClose")) + " " + lvlBadge(need[role === "long" ? 0 : 1]) + "</div>" +
+            '<div class="gtiles col">' + rolePicks(mp, role, null, 3).map(function (x) { return gunTile(x); }).join("") + "</div></div>";
+        }).join("") + "</div>";
+      combo.hidden = false;
+      wireTiles(combo);
+    } else {
+      combo.hidden = true;
+    }
+
+    var top = $("mapTop");
+    top.innerHTML = "<h3>" + esc(t("mapTopTitle", nm(mp))) + '</h3><div class="note">' + esc(t("mapPickHint")) + '</div><div class="gtiles">' +
+      mapTopPicks(mp, 8).map(function (x) { return gunTile(x); }).join("") + "</div>";
+    wireTiles(top);
+  }
+
   function renderFooter() {
     var labels = (textChain()[0] || {}).sources || (C.TEXT.he || {}).sources || [];
     var src = (C.SOURCES || []).map(function (s, i) { return '<a href="' + esc(s.u) + '" target="_blank" rel="noopener">' + esc(labels[i] || s.u) + "</a>"; }).join(" · ");
@@ -605,11 +794,17 @@
     var h = hashParams();
     var keepGun = keepSelection && state.gun ? state.gun.nn : null;
     if (!keepSelection && h.p && ["meta", "balanced", "budget"].indexOf(h.p) >= 0) state.profile = h.p;
+    if (!keepSelection && h.m && mapById(h.m)) state.map = h.m;
     var g = gunByNN(keepGun || h.g || "");
     if (g) { selectClass(g.cls, false); selectGun(g.id); }
     else renderClasses();
+    if (!keepSelection && h.v === "map") state.mode = "map";
+    setMode(state.mode, state.mode !== "map");
     if (!keepSelection) freshness();
   }
+  Array.prototype.forEach.call(document.querySelectorAll("#modeTabs button"), function (b) {
+    b.onclick = function () { if (D) setMode(b.getAttribute("data-mode")); };
+  });
   applyStatic();
   init(false);
 })();

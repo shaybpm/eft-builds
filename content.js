@@ -3,7 +3,9 @@
    TEXT.<lang>: Hebrew below, English in content.en.js, Russian in content.ru.js, all with the same shape.
    Data that changes with the game (stats, prices, parts, bosses per map) comes from data/eft-data.js.
    Based on research/meta-research-2026-10.md (patch 1.1.5).
-   MAPS.prof = fit for [close, medium, long] range, 0 to 1. GUNS keys = tarkov.dev normalizedName.
+   MAPS.prof = fit for [close, medium, long] range, 0 to 1. MAPS.need = how much the map calls for
+   [a long-range weapon, a close-range weapon]: 0 not needed, 1 optional, 2 recommended, 3 must.
+   GUNS keys = tarkov.dev normalizedName.
    Tier = combined judgement: 2026 community sources where they exist + game data where they do not. */
 window.EFT_CONTENT = {
   "PATCH": "1.1.5",
@@ -56,6 +58,10 @@ window.EFT_CONTENT = {
         0.2,
         0
       ],
+      "need": [
+        0,
+        3
+      ],
       "armor": true
     },
     "night-factory": {
@@ -63,6 +69,10 @@ window.EFT_CONTENT = {
         1,
         0.15,
         0
+      ],
+      "need": [
+        0,
+        3
       ],
       "armor": true
     },
@@ -72,6 +82,10 @@ window.EFT_CONTENT = {
         1,
         0.5
       ],
+      "need": [
+        1,
+        2
+      ],
       "armor": false
     },
     "woods": {
@@ -79,6 +93,10 @@ window.EFT_CONTENT = {
         0.1,
         0.6,
         1
+      ],
+      "need": [
+        3,
+        2
       ],
       "armor": false
     },
@@ -88,6 +106,10 @@ window.EFT_CONTENT = {
         0.85,
         0.85
       ],
+      "need": [
+        2,
+        3
+      ],
       "armor": true
     },
     "shoreline": {
@@ -95,6 +117,10 @@ window.EFT_CONTENT = {
         0.45,
         0.85,
         0.8
+      ],
+      "need": [
+        2,
+        2
       ],
       "armor": false
     },
@@ -104,6 +130,10 @@ window.EFT_CONTENT = {
         0.9,
         0.35
       ],
+      "need": [
+        1,
+        3
+      ],
       "armor": true
     },
     "interchange": {
@@ -111,6 +141,10 @@ window.EFT_CONTENT = {
         1,
         0.55,
         0.15
+      ],
+      "need": [
+        0,
+        3
       ],
       "armor": true
     },
@@ -120,6 +154,10 @@ window.EFT_CONTENT = {
         0.9,
         0.5
       ],
+      "need": [
+        1,
+        3
+      ],
       "armor": true
     },
     "the-lab": {
@@ -127,6 +165,10 @@ window.EFT_CONTENT = {
         1,
         0.45,
         0
+      ],
+      "need": [
+        0,
+        3
       ],
       "armor": true
     },
@@ -136,6 +178,10 @@ window.EFT_CONTENT = {
         0.4,
         0
       ],
+      "need": [
+        0,
+        3
+      ],
       "armor": true
     },
     "ground-zero": {
@@ -144,6 +190,10 @@ window.EFT_CONTENT = {
         0.9,
         0.3
       ],
+      "need": [
+        0,
+        3
+      ],
       "armor": false
     },
     "ground-zero-21": {
@@ -151,6 +201,10 @@ window.EFT_CONTENT = {
         0.65,
         0.9,
         0.3
+      ],
+      "need": [
+        0,
+        3
       ],
       "armor": false
     },
@@ -169,6 +223,10 @@ window.EFT_CONTENT = {
         0.15,
         0
       ],
+      "need": [
+        0,
+        3
+      ],
       "armor": true
     },
     "icebreaker": {
@@ -176,6 +234,10 @@ window.EFT_CONTENT = {
         0.95,
         0.55,
         0.1
+      ],
+      "need": [
+        0,
+        3
       ],
       "armor": true
     }
@@ -788,6 +850,23 @@ window.EFT_CONTENT.TEXT.he = {
     "terminal": "הציוד שלך מוחרם בכניסה, אז הבילד לא רלוונטי שם.",
     "the-labyrinth": "מבוך תת-קרקעי עם מלכודות: Shadow of Tagilla (שריון וקסדה Class 6) ו-Vengeful Killa. קרבות קצרים מאוד.",
     "icebreaker": "ספינה עם מסדרונות צרים, PVE בלבד: The Wedge, Knight עם Rogues ו-Black Division עם שריון Class 5-6. צריך חדירה של 55 ומעלה."
+  },
+  "kit": {
+    "factory": "קרב צמוד בלבד: נשק אוטומטי אחד עם תחמושת חודרת מספיק. נשק ארוך-טווח רק יכביד.",
+    "night-factory": "קרב צמוד בחושך: נשק אוטומטי אחד עם תחמושת חודרת ופנס מספיק. נשק נוסף לא עוזר כאן.",
+    "customs": "נשק אוטומטי לדורמים ולבסיס הסקאבים הוא העיקר. מי שרוצה לשלוט בשדות הפתוחים יכול להוסיף DMR, אבל זה לא הכרחי.",
+    "woods": "רוב הקרבות בשדות פתוחים ומטווח ארוך, אז נשק צלפים או DMR הוא העיקר. במנסרה, מול השומרים של Shturman ובהפתעות מקרוב, נשק אוטומטי שני מציל את הריד.",
+    "lighthouse": "שני נשקים: נשק ארוך-טווח לגבעות ולחוף, ונשק אוטומטי עם חדירה של 50 ומעלה למתקן טיהור המים (Glukhar והשומרים שלו) ולבקתות של ה-Rogues.",
+    "shoreline": "בחוץ הטווחים ארוכים ובתוך הריזורט הקרב צמוד, אז שילוב של נשק ארוך-טווח ונשק אוטומטי הוא הכי בטוח.",
+    "reserve": "רוב הקרבות קצרים-בינוניים בבניינים ובבונקרים, מול Raiders משוריינים. נשק אוטומטי חזק הוא חובה, ו-DMR נוסף שימושי רק לחצרות הפתוחות.",
+    "interchange": "קניון סגור: נשק אוטומטי אחד עם חדירה גבוהה (מול Killa) מספיק. אין קווי ראייה ארוכים שמצדיקים נשק צלפים.",
+    "streets-of-tarkov": "רוב הקרבות בבניינים וברחובות קצרים, אז נשק אוטומטי הוא העיקר. DMR נוסף עוזר מול הצלפים של Kaban ברחובות הארוכים.",
+    "the-lab": "CQB מול Raiders משוריינים: נשק אוטומטי אחד עם חדירה גבוהה. נשק נוסף רק מוסיף משקל.",
+    "the-lab-dark": "חושך וקרב צמוד: נשק אוטומטי אחד עם חדירה גבוהה וראיית לילה. נשק נוסף לא עוזר כאן.",
+    "ground-zero": "טווחים קצרים-בינוניים ואויבים קלים: כל נשק אוטומטי סביר מספיק לבד.",
+    "ground-zero-21": "אויבים קשים יותר, אבל עדיין טווחים קצרים-בינוניים: נשק אוטומטי אחד עם תחמושת טובה מספיק.",
+    "the-labyrinth": "מסדרונות צרים ומלכודות: נשק אוטומטי קצר אחד שמתמודד עם שריון Class 6. נשק ארוך רק מפריע.",
+    "icebreaker": "מסדרונות צרים בספינה: נשק אוטומטי אחד עם חדירה של 55 ומעלה. אין שימוש לנשק צלפים."
   },
   "guns": {
     "desert-tech-mdr-762x51-assault-rifle": {

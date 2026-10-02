@@ -20,7 +20,7 @@ import traceback
 
 import requests
 
-APP_VERSION = "1.1.2"
+APP_VERSION = "1.2.0"
 BASE_URL = "https://json.tarkov.dev"
 GAME_MODE = "pve"
 ENDPOINTS = ["items", "items_en", "items_ru", "maps", "maps_en", "maps_ru", "traders", "traders_en",

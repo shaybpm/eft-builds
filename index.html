@@ -30,6 +30,12 @@
 </header>
 
 <main>
+  <nav id="modeTabs" class="mode-tabs">
+    <button data-mode="gun"></button>
+    <button data-mode="map"></button>
+  </nav>
+
+  <div id="gunMode">
   <section class="step">
     <h2><span class="num">1</span> <span id="step1Text"></span></h2>
     <div id="classGrid" class="class-grid"></div>
@@ -51,6 +57,7 @@
         <div class="card" id="statsCard"></div>
         <div class="card" id="partsCard"></div>
         <div class="card" id="ammoCard"></div>
+        <div class="card" id="kitCard"></div>
       </div>
       <aside class="side-col">
         <div class="card" id="verdictCard"></div>
@@ -59,6 +66,19 @@
       </aside>
     </div>
   </section>
+  </div>
+
+  <div id="mapMode" hidden>
+    <section class="step">
+      <h2><span class="num">1</span> <span id="stepMapText"></span></h2>
+      <div id="mapGrid" class="map-grid"></div>
+    </section>
+    <section id="mapView" hidden>
+      <div class="card" id="mapInfo"></div>
+      <div class="card" id="mapCombo"></div>
+      <div class="card" id="mapTop"></div>
+    </section>
+  </div>
 </main>
 
 <footer id="footer"></footer>

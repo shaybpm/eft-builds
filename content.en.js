@@ -45,6 +45,23 @@ window.EFT_CONTENT.TEXT.en = {
     "the-labyrinth": "An underground maze with traps: Shadow of Tagilla (Class 6 armor and helmet) and Vengeful Killa. Very short fights.",
     "icebreaker": "A ship with narrow corridors, PvE only: The Wedge, Knight with Rogues, and Black Division in Class 5-6 armor. You need penetration of 55 or more."
   },
+  kit: {
+    "factory": "Close fighting only: one automatic weapon with penetrating ammo is enough. A long-range gun just weighs you down.",
+    "night-factory": "Close fighting in the dark: one automatic weapon with penetrating ammo and a flashlight is enough. A second gun does not help here.",
+    "customs": "An automatic weapon for the dorms and the Scav base is the core. If you want to control the open fields you can add a DMR, but it is not required.",
+    "woods": "Most fights happen across open fields at long range, so a sniper rifle or DMR is the core. At the sawmill, against Shturman's guards and in close surprises, a second automatic weapon saves the raid.",
+    "lighthouse": "Two weapons: a long-range gun for the hills and the coast, and an automatic weapon with 50+ penetration for the water treatment plant (Glukhar and his guards) and the Rogue chalets.",
+    "shoreline": "Long ranges outside and close fighting inside the resort, so a long-range gun plus an automatic weapon is the safest combination.",
+    "reserve": "Most fights are short to medium inside buildings and bunkers, against armored Raiders. A strong automatic weapon is a must; a DMR on top only pays off in the open courtyards.",
+    "interchange": "A closed mall: one automatic weapon with high penetration (for Killa) is enough. There are no long sightlines that justify a sniper rifle.",
+    "streets-of-tarkov": "Most fights are inside buildings and on short streets, so an automatic weapon is the core. A DMR on top helps against Kaban's snipers down the long streets.",
+    "the-lab": "CQB against armored Raiders: one automatic weapon with high penetration. A second gun only adds weight.",
+    "the-lab-dark": "Darkness and close fighting: one automatic weapon with high penetration plus night vision. A second gun does not help here.",
+    "ground-zero": "Short to medium ranges and easy enemies: any decent automatic weapon is enough on its own.",
+    "ground-zero-21": "Tougher enemies, but still short to medium ranges: one automatic weapon with good ammo is enough.",
+    "the-labyrinth": "Narrow corridors and traps: one short automatic weapon that can handle Class 6 armor. A long gun only gets in the way.",
+    "icebreaker": "Narrow ship corridors: one automatic weapon with 55+ penetration. A sniper rifle has no use here."
+  },
   guns: {
     "desert-tech-mdr-762x51-assault-rifle": {
       summary: "A 7.62x51 bullpup with high ergonomics: one of the few weapons that fires 60+ penetration ammo in full auto (M61 by barter from Ref, M993 from loot). Top of the 2026 meta lists.",
