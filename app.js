@@ -424,6 +424,7 @@
     renderHero(g);
     renderProfiles(g);
     renderStats(g);
+    renderDiagram(g);
     renderParts(g);
     renderAmmo(g);
     renderVerdict(g);
@@ -442,12 +443,14 @@
     if (g.dist) facts.push('<span class="chip">' + esc(t("dist", g.dist)) + "</span>");
     var price = g.price ? rub(g.price.p) + " · " + sourceText(g.price) : t("gunNotSold");
     $("hero").innerHTML =
-      '<div><div class="hero-img"><img alt="" src="' + esc(g.img) + '"></div><div class="note img-note">' + esc(t("imgNote")) + "</div></div>" +
+      '<div><div class="hero-img"><img alt="" src="' + esc(g.img) + '"></div><div class="note img-note">' + esc(t("imgNote")) +
+      ' <button class="linkbtn" id="toDiagram">' + esc(t("toDiagram")) + "</button></div></div>" +
       "<div><h2>" + bdi(sn(g)) + (tier ? '<span class="tier ' + tier + '" title="' + esc(t("tierLine")) + '">' + tier + "</span>" : "") + "</h2>" +
       '<div class="full">' + bdi(nm(g)) + "</div>" +
       '<div class="facts">' + facts.join("") + "</div>" +
       '<div class="note">' + esc(t("basePrice", price)) + "</div>" +
       '<div class="note"><a href="' + esc(g.link) + '" target="_blank" rel="noopener">tarkov.dev</a> · <a href="' + esc(g.wiki) + '" target="_blank" rel="noopener">Wiki</a></div></div>';
+    $("toDiagram").onclick = function () { $("diagramCard").scrollIntoView({ behavior: "smooth", block: "start" }); };
   }
 
   function renderProfiles(g) {
@@ -505,22 +508,27 @@
     return out.join("");
   }
 
-  function renderParts(g) {
-    var b = build(g, state.profile);
-    var rows = walk(b.tree, 0, null, null, []).slice(1);
-    var html = '<div class="parts-head"><h3>' + esc(t("partsTitle")) + '</h3><span class="note">' + esc(t("partsHint")) + "</span></div>";
-    // Outline numbers keep every row aligned and still show the tree: 3.1 mounts on part 3
-    var counters = [];
+  // The build's parts in assembly order with outline numbers, which keep every row aligned and still show
+  // the tree (3.1 mounts on part 3). The parts list and the build diagram share these numbers.
+  function partRows(b) {
+    var rows = walk(b.tree, 0, null, null, []).slice(1), counters = [];
     rows.forEach(function (r) {
       counters.length = r.depth;
       counters[r.depth - 1] = (counters[r.depth - 1] || 0) + 1;
       r.num = counters.join(".");
     });
+    return rows;
+  }
+
+  function renderParts(g) {
+    var b = build(g, state.profile);
+    var rows = partRows(b);
+    var html = '<div class="parts-head"><h3>' + esc(t("partsTitle")) + '</h3><span class="note">' + esc(t("partsHint")) + "</span></div>";
     rows.forEach(function (r) {
       var it = item(r.node.i);
       var on = r.parent.i === g.id ? esc(t("gunBody")) : bdi(sn(item(r.parent.i)));
       var where = esc(t("slotLbl", slotName(r.slot))) + " · " + t("mountedOn", on);
-      html += '<div class="part' + (r.node.o ? " optic" : "") + (r.depth > 1 ? " child" : "") + '">' +
+      html += '<div class="part' + (r.node.o ? " optic" : "") + (r.depth > 1 ? " child" : "") + '" data-num="' + esc(r.num) + '">' +
         '<div class="idx">' + bdi(r.num) + "</div>" +
         '<div class="pimg">' + (it.img ? '<img loading="lazy" alt="" src="' + esc(it.img) + '">' : "") + "</div>" +
         '<div><div class="pn">' + bdi(nm(it)) + "</div>" +
@@ -538,6 +546,103 @@
     }
     $("partsCard").innerHTML = html;
   }
+
+  // ------------------------------------------------------------------ build diagram
+  // A picture of the build made from the parts themselves: the bare gun on the start side and every part one
+  // column further than the part it mounts on, joined to it by a line. Each part without sub-parts takes a row
+  // of its own and a parent sits level with the middle of its children, so branches never overlap.
+  var narrowMq = window.matchMedia("(max-width:640px)"), diagramW = -1;
+  function r3(v) { return Math.round(v * 1000) / 1000; }
+  function baseImg(url) { return String(url || "").replace(/-grid-image\.webp$/, "-base-image.webp"); } // same picture, no grid background
+  function renderDiagram(g) {
+    var b = build(g, state.profile);
+    // sizes in rem, so A-/A/A+ scale the diagram with the rest of the page
+    var S = narrowMq.matches ? { rw: 5.6, rh: 3, nw: 4.7, ih: 2.4, lab: 1.15, gap: 1.2, rg: .45 }
+      : { rw: 8.5, rh: 4.2, nw: 6.4, ih: 3.1, lab: 1.3, gap: 2, rg: .55 };
+    var all = [{ node: b.tree, depth: 0 }].concat(partRows(b)); // same pre-order as the list
+    var box = $("diagramCard"), px = parseFloat(getComputedStyle(root).fontSize) || 18;
+    var maxD = Math.max.apply(null, all.map(function (r) { return r.depth; }));
+    // deep builds: narrow the columns (down to 3/4) so the whole diagram fits the card; past that it scrolls sideways
+    var avail = box.clientWidth / px - 2.3, need = S.rw + maxD * (S.gap + S.nw);
+    if (box.clientWidth && need > avail) {
+      var k = Math.max(0.75, (avail - S.rw) / (need - S.rw));
+      S.nw *= k; S.gap *= k;
+    }
+    diagramW = box.clientWidth;
+    var pitch = S.ih + S.lab + S.rg, leaf = 0, i = 0;
+    (function place(node) { // vertical centre of every part (cy), leaves first
+      var me = all[i++];
+      me.kids = [];
+      node.ch.forEach(function (c) { me.kids.push(all[i]); place(c.n); });
+      me.cy = me.kids.length ? (me.kids[0].cy + me.kids[me.kids.length - 1].cy) / 2 : (leaf++) * pitch + S.ih / 2;
+    })(b.tree);
+    all.forEach(function (r) {
+      r.w = r.depth ? S.nw : S.rw;
+      r.h = r.depth ? S.ih : S.rh;
+      r.x = r.depth ? S.rw + S.gap + (r.depth - 1) * (S.nw + S.gap) : 0;
+      r.y = r.cy - r.h / 2;
+    });
+    var shift = Math.max(0, -Math.min.apply(null, all.map(function (r) { return r.y; }))); // the tall gun picture may stick out on top
+    var W = S.rw + maxD * (S.gap + S.nw), H = 0;
+    all.forEach(function (r) { r.y += shift; r.cy += shift; H = Math.max(H, r.y + r.h + S.lab); });
+
+    // connector from each part to its parent: out of the parent, along the middle of the gap, into the part
+    var paths = "";
+    all.forEach(function (p) {
+      p.kids.forEach(function (c) {
+        var x1 = r3(p.x + p.w), x2 = r3(c.x), xm = r3(c.x - S.gap / 2), y1 = r3(p.cy), y2 = r3(c.cy);
+        var dy = y2 - y1, rr = Math.min(0.4, Math.abs(dy) / 2), sg = dy > 0 ? 1 : -1, d;
+        if (Math.abs(dy) < 0.01) d = "M" + x1 + " " + y1 + "H" + x2;
+        else d = "M" + x1 + " " + y1 + "H" + r3(xm - rr) + "Q" + xm + " " + y1 + " " + xm + " " + r3(y1 + sg * rr) +
+          "V" + r3(y2 - sg * rr) + "Q" + xm + " " + y2 + " " + r3(xm + rr) + " " + y2 + "H" + x2;
+        paths += "<path" + (c.node.o ? ' class="o"' : "") + ' d="' + d + '"/>';
+      });
+    });
+
+    var nodes = all.map(function (r) {
+      var pos = 'style="inset-inline-start:' + r3(r.x) + "rem;top:" + r3(r.y) + "rem;width:" + r3(r.w) + 'rem"';
+      if (!r.depth) {
+        var bare = g.img2 || g.img; // the gun with nothing mounted; the 512px render when tarkov.dev has it
+        return '<div class="bd-node root" ' + pos + '><span class="bd-img" style="height:' + S.rh + 'rem"><img alt="" src="' +
+          esc(String(bare).replace(/-base-image\.webp$/, "-512.webp")) + '" data-fb="' + esc(bare) + '"></span>' +
+          '<span class="bd-name" dir="auto">' + esc(sn(g)) + "</span></div>";
+      }
+      var it = item(r.node.i), on = r.parent.i === g.id ? t("gunBody") : sn(item(r.parent.i));
+      var tip = nm(it) + "\n" + t("slotLbl", slotName(r.slot)) + " · " + t("mountedOn", on) + (r.node.f ? "\n" + t("withGun") : "");
+      return '<button type="button" class="bd-node' + (r.node.o ? " optic" : "") + '" ' + pos + ' data-num="' + esc(r.num) + '" title="' + esc(tip) + '">' +
+        '<span class="bd-img" style="height:' + S.ih + 'rem">' +
+        (it.img ? '<img loading="lazy" alt="" src="' + esc(baseImg(it.img)) + '" data-fb="' + esc(it.img) + '">' : "") +
+        '<span class="bd-num">' + bdi(r.num) + "</span></span>" +
+        '<span class="bd-name" dir="auto">' + esc(sn(it)) + "</span></button>"; // dir=auto: a long name is cut at its own end
+    }).join("");
+
+    box.innerHTML = '<div class="parts-head"><h3>' + esc(t("diagramTitle")) + '</h3><span class="note">' + esc(t("diagramHint")) + "</span></div>" +
+      '<div class="bd-wrap"><div class="bd" style="width:' + r3(W) + "rem;height:" + r3(H) + 'rem">' +
+      '<svg class="bd-lines" viewBox="0 0 ' + r3(W) + " " + r3(H) + '" aria-hidden="true">' + paths + "</svg>" + nodes + "</div></div>" +
+      '<div class="note bd-more" hidden>' + esc(t("diagramScroll")) + "</div>";
+    var wrap = box.querySelector(".bd-wrap");
+    box.querySelector(".bd-more").hidden = !(wrap.scrollWidth > wrap.clientWidth + 1);
+    Array.prototype.forEach.call(box.querySelectorAll("img[data-fb]"), function (im) { // missing picture: the grid one
+      im.onerror = function () { im.onerror = null; im.src = im.getAttribute("data-fb"); };
+    });
+    Array.prototype.forEach.call(box.querySelectorAll("button.bd-node"), function (btn) {
+      btn.onclick = function () { showPart(btn.getAttribute("data-num")); };
+    });
+  }
+  // Clicking a part in the diagram brings its row in the parts list into view and flashes it
+  function showPart(num) {
+    var row = document.querySelector('#partsCard .part[data-num="' + num + '"]');
+    if (!row) return;
+    row.scrollIntoView({ behavior: "smooth", block: "center" });
+    row.classList.remove("flash");
+    void row.offsetWidth; // restart the animation
+    row.classList.add("flash");
+  }
+  // the card changed width (window resized, phone turned, view shown again): fit the diagram again
+  if (window.ResizeObserver) new ResizeObserver(function () {
+    var w = $("diagramCard").clientWidth;
+    if (D && state.gun && w && w !== diagramW) requestAnimationFrame(function () { renderDiagram(state.gun); }); // next frame: no resize loop
+  }).observe($("diagramCard"));
 
   function renderAmmo(g) {
     var html = "<h3>" + esc(t("ammoTitle")) + "</h3>";
