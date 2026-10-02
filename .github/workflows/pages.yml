@@ -1,0 +1,54 @@
+# Rebuilds the data from tarkov.dev (PVE) every 6 hours and publishes the site to GitHub Pages.
+name: Refresh data and publish
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  actions: write   # lets the run re-enable its own schedule (GitHub pauses idle schedules after 60 days)
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install requests
+      - name: Download PVE data and compute builds
+        run: python update_data.py
+      - name: Assemble the site
+        run: |
+          mkdir -p _site/data
+          cp index.html app.js i18n.js content*.js styles.css favicon.png _site/
+          cp data/eft-data.js data/status.js _site/data/
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+      - name: Keep the 6-hour schedule alive
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/pages.yml/enable" || true
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

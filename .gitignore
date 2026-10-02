@@ -1,0 +1,7 @@
+# downloaded and generated data (rebuilt by update_data.py / the GitHub workflow)
+cache/
+data/
+update.log
+__pycache__/
+*.tmp
+zz-*

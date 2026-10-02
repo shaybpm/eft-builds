@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EFT Builds · PVE</title>
+<link rel="icon" href="favicon.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="ctlBar">
+  <button id="themeBtn"></button>
+  <button id="fsPlus">A+</button>
+  <button id="fsDef">A</button>
+  <button id="fsMinus">A-</button>
+  <button class="lang" data-lang="he">עב</button>
+  <button class="lang" data-lang="en">EN</button>
+  <button class="lang" data-lang="ru">RU</button>
+</div>
+
+<header class="top">
+  <div class="brand">
+    <div class="logo">EFT</div>
+    <div>
+      <h1><span id="h1Text"></span> <span class="mode">PVE</span></h1>
+      <div class="sub" id="dataInfo"></div>
+    </div>
+  </div>
+  <div id="banner" class="banner" hidden></div>
+</header>
+
+<main>
+  <section class="step">
+    <h2><span class="num">1</span> <span id="step1Text"></span></h2>
+    <div id="classGrid" class="class-grid"></div>
+  </section>
+
+  <section class="step" id="stepModel" hidden>
+    <h2><span class="num">2</span> <span id="step2Text"></span></h2>
+    <div class="model-row">
+      <select id="modelSelect"></select>
+      <span class="hint" id="modelHint"></span>
+    </div>
+  </section>
+
+  <section id="weaponView" hidden>
+    <div class="layout">
+      <div class="main-col">
+        <div class="card hero" id="hero"></div>
+        <div class="profiles" id="profileTabs"></div>
+        <div class="card" id="statsCard"></div>
+        <div class="card" id="partsCard"></div>
+        <div class="card" id="ammoCard"></div>
+      </div>
+      <aside class="side-col">
+        <div class="card" id="verdictCard"></div>
+        <div class="card" id="prosCard"></div>
+        <div class="card" id="mapsCard"></div>
+      </aside>
+    </div>
+  </section>
+</main>
+
+<footer id="footer"></footer>
+
+<script src="i18n.js"></script>
+<script src="content.js"></script>
+<script src="content.en.js" onerror="void 0"></script>
+<script src="content.ru.js" onerror="void 0"></script>
+<script src="data/status.js" onerror="void 0"></script>
+<script src="data/eft-data.js" onerror="void 0"></script>
+<script src="app.js"></script>
+</body>
+</html>
